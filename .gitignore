@@ -2,4 +2,4 @@
 *.elf
 *.s
 cmsis/
-build/
+out/

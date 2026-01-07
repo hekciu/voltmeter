@@ -11,10 +11,10 @@ ${BUILD_DIR}:
 ${BUILD_DIR}/main.o: main.c
 	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 main.c -c -o ${BUILD_DIR}/main.o
 
-${BUILD_DIR}/usart.o: c/usart.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/usart.c -c -o ${BUILD_DIR}/usart.o
+${BUILD_DIR}/usb.o: c/usb.c
+	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/usb.c -c -o ${BUILD_DIR}/usb.o
 
-OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usart.o
+OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
 	arm-none-eabi-gcc -T link.ld -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
