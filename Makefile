@@ -17,7 +17,10 @@ ${BUILD_DIR}/usb.o: c/usb.c
 ${BUILD_DIR}/led.o: c/led.c
 	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/led.c -c -o ${BUILD_DIR}/led.o
 
-OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o
+${BUILD_DIR}/systick.o: c/systick.c
+	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/systick.c -c -o ${BUILD_DIR}/systick.o
+
+OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
 	arm-none-eabi-gcc -T link.ld -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf

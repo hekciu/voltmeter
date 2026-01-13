@@ -7,6 +7,7 @@
 #include "stm32f1xx.h"
 
 #define BIT(n) (1UL << (n))
+#define FLAG_SET(reg, bit) (((reg) & (bit)) == 0UL)
 
 #endif
 
