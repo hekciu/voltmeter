@@ -14,7 +14,10 @@ ${BUILD_DIR}/main.o: main.c
 ${BUILD_DIR}/usb.o: c/usb.c
 	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/usb.c -c -o ${BUILD_DIR}/usb.o
 
-OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o
+${BUILD_DIR}/led.o: c/led.c
+	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/led.c -c -o ${BUILD_DIR}/led.o
+
+OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
 	arm-none-eabi-gcc -T link.ld -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
@@ -32,7 +35,7 @@ build: out ${BUILD_DIR}/firmware.bin
 assembly: firmware.s
 
 flash:
-	st-flash --reset write firmware.bin 0x8000000
+	st-flash --reset write ${BUILD_DIR}/firmware.bin 0x8000000
 
 clean:
 	rm -rf ${BUILD_DIR}
