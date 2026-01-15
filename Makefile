@@ -5,8 +5,21 @@ APP_INCLUDE=inc
 INC=-I${CMSIS_CORE_INCLUDE} -I${CMSIS_WB_INCLUDE} -I${APP_INCLUDE}
 BUILD_DIR=out
 
+STARTUP_FILE=cmsis/cmsis_f1/Source/Templates/gcc/startup_stm32f103xb.s
+LINKER_SCRIPT=cmsis/cmsis_f1/Source/Templates/gcc/linker/STM32F103XB_FLASH.ld
+SYSTEM_STM32F1XX_FILE=system.c
+
+firmware.s: main.c
+	arm-none-eabi-gcc -mcpu=cortex-m3 main.c -S -o firmware.s
+
 ${BUILD_DIR}:
 	mkdir -p ${BUILD_DIR}
+
+${BUILD_DIR}/startup.o: ${STARTUP_FILE}
+	arm-none-eabi-gcc -mcpu=cortex-m3 ${STARTUP_FILE} -c -o ${BUILD_DIR}/startup.o
+
+${BUILD_DIR}/system.o: ${SYSTEM_STM32F1XX_FILE}
+	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 ${SYSTEM_STM32F1XX_FILE} -c -o ${BUILD_DIR}/system.o
 
 ${BUILD_DIR}/main.o: main.c
 	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 main.c -c -o ${BUILD_DIR}/main.o
@@ -20,16 +33,13 @@ ${BUILD_DIR}/led.o: c/led.c
 ${BUILD_DIR}/systick.o: c/systick.c
 	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/systick.c -c -o ${BUILD_DIR}/systick.o
 
-OBJECTS=${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o
+OBJECTS=${BUILD_DIR}/system.o ${BUILD_DIR}/startup.o ${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
-	arm-none-eabi-gcc -T link.ld -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
+	arm-none-eabi-gcc -T ${LINKER_SCRIPT} -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
 
 ${BUILD_DIR}/firmware.bin: ${BUILD_DIR}/firmware.elf
 	arm-none-eabi-objcopy -O binary ${BUILD_DIR}/firmware.elf ${BUILD_DIR}/firmware.bin
-
-firmware.s: main.c
-	arm-none-eabi-gcc -mcpu=cortex-m3 main.c -S -o firmware.s
 
 .PHONY: build flash clean assembly
 
