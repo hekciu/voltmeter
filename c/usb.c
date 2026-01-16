@@ -1,22 +1,30 @@
+#include <stdint.h>
+
 #include "cmsis.h"
 #include "usb.h"
 #include "led.h"
 #include "systick.h"
 
 
+#define ENDPOINT_0_ADDRESS 0
+
 static void on_usb_reset();
+
 
 void usb_hp_handler(void) {
     led_toggle();
 }
 
+
 void usb_lp_handler(void) {
     led_toggle();
 }
 
+
 void usb_wakeup_handler(void) {
     led_toggle();
 }
+
 
 void usb_initialize() {
     /*
@@ -47,6 +55,18 @@ void usb_initialize() {
     // remove any spurious pending interrupt
     USB->ISTR = 0UL;
 
+    // enable all interrupts and configure registers
+    USB->CNTR |= USB_CNTR_CTRM;
+    USB->CNTR |= USB_CNTR_PMAOVRM;
+    USB->CNTR |= USB_CNTR_ERRM;
+    USB->CNTR |= USB_CNTR_WKUPM;
+    USB->CNTR |= USB_CNTR_SUSPM;
+    USB->CNTR |= USB_CNTR_RESETM;
+    USB->CNTR |= USB_CNTR_SOFM;
+    USB->CNTR |= USB_CNTR_ESOFM;
+
+    // initialize packet buffer description table
+
     // this part is the same as when usb reset interrupt is triggered
     on_usb_reset();
 }
@@ -57,6 +77,8 @@ static void configure_0_endpoint() {
     USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
 
     // set 0 endpoint address
+    USB->EP0R &= ~USB_EP0R_EA_Msk;
+    USB->EP0R |= (ENDPOINT_0_ADDRESS << USB_EP0R_EA_Pos);
 
     // enable 0 endpoint
 }

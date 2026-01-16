@@ -21,15 +21,18 @@ void USBWakeUp_IRQHandler(void) { usb_wakeup_handler(); };
 
 
 void main(void) {
-    usb_initialize();
+    /* SysTick initialization, other stuff depend on this */
     SystemCoreClockUpdate();
     systick_enable(SystemCoreClock / 1000);
+
+    /* Peripherals initilization */
     led_enable();
+    usb_initialize();
 
     while(true) {
         //led_toggle();
 
-        //systick_wait_ms(1000);
+        //systick_wait_ms(500);
 
         // spin(99999);
     };
