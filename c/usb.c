@@ -36,8 +36,22 @@ void usb_initialize() {
     NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
     NVIC_EnableIRQ(USBWakeUp_IRQn);
 
-    // activate register macrocell clock
+    /*
+        usb macrocell clock configuration,
+        we need 48MHz from PLL output
+    */
+    // set HSI (8MHz) / 2 = 4MHz as PLL input
+    RCC->CFGR &= ~RCC_CFGR_PLLSRC;
+
+    // select PLL multiply factor to 12 (12 * 4 = 48)
+    RCC->CFGR &= ~RCC_CFGR_PLLMULL_Msk;
+    RCC->CFGR |= (10 << RCC_CFGR_PLLMULL_Pos);
+
+    // set usb prescaler to 1x (we need 48MHz)
     RCC->CFGR |= RCC_CFGR_USBPRE;
+
+    // enable PLL
+    RCC->CR |= RCC_CR_PLLON;
 
     // de-assert macrocell specific reset signal
     RCC->APB1RSTR &= ~RCC_APB1RSTR_USBRST;

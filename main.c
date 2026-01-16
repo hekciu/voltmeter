@@ -25,7 +25,7 @@ void main(void) {
     SystemCoreClockUpdate();
     systick_enable(SystemCoreClock / 1000);
 
-    /* Peripherals initilization */
+    /* Peripherals initialization */
     led_enable();
     usb_initialize();
 
