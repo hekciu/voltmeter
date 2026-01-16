@@ -33,7 +33,7 @@ ${BUILD_DIR}/systick.o: c/systick.c
 OBJECTS=${BUILD_DIR}/system.o ${BUILD_DIR}/startup.o ${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
-	arm-none-eabi-gcc -T ${LINKER_SCRIPT} -mcpu=cortex-m3 -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
+	arm-none-eabi-gcc -T ${LINKER_SCRIPT} -mcpu=cortex-m3 -ffreestanding -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
 
 ${BUILD_DIR}/firmware.bin: ${BUILD_DIR}/firmware.elf
 	arm-none-eabi-objcopy -O binary ${BUILD_DIR}/firmware.elf ${BUILD_DIR}/firmware.bin

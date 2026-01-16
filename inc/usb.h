@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
-void initialize_usb();
+void usb_initialize(void);
+void usb_hp_handler(void);
+void usb_lp_handler(void);
+void usb_wakeup_handler(void);
 
 #endif
