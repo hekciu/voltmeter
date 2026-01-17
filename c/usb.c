@@ -9,6 +9,18 @@
 #define ENDPOINT_0_ADDRESS 0
 #define BTABLE_ADDRESS 0x0
 
+#define PMA_ADDRESS 0x40006000
+
+typedef struct {
+    uint32_t tx_addrs;
+    uint32_t tx_count;
+    uint32_t rx_addrs;
+    uint32_t rx_count;
+} usb_buff_desc_t;
+
+#define USB_BUFF_DESC_PTR(i) ((usb_buff_desc_t*)(PMA_ADDRESS + ((i) * sizeof(usb_buff_desc_t))))
+
+static void zero_btable();
 static void on_usb_reset();
 
 
@@ -104,4 +116,11 @@ static void on_usb_reset() {
     USB->DADDR |= USB_DADDR_EF;
 
     configure_0_endpoint();
+}
+
+
+static void zero_btable_endpoint(uint32_t n) {
+    for (uint32_t i = 0; i < sizeof(usb_buff_desc_t); i++) {
+        *(uint32_t*)(USB_BUFF_DESC_PTR(n) + i) = 0UL;
+    }
 }
