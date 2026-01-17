@@ -4,13 +4,10 @@
 #include "usb.h"
 #include "led.h"
 #include "systick.h"
+#include "system_clock.h"
 
 
 static inline void spin(uint32_t ticks) { while(ticks > 0) ticks--; }
-
-/* Defined inside system.c */
-extern uint32_t SystemCoreClock;
-extern void SystemCoreClockUpdate(void);
 
 
 /* Overriding interrupt handlers */
@@ -21,8 +18,10 @@ void USBWakeUp_IRQHandler(void) { usb_wakeup_handler(); };
 
 
 void main(void) {
+    /* System clock configuration */
+    system_clock_configure();
+
     /* SysTick initialization, other stuff depend on this */
-    SystemCoreClockUpdate();
     systick_enable(SystemCoreClock / 1000);
 
     /* Peripherals initialization */
@@ -30,10 +29,10 @@ void main(void) {
     usb_initialize();
 
     while(true) {
-        //led_toggle();
+        led_toggle();
 
-        //systick_wait_ms(500);
+        systick_wait_ms(500);
 
-        // spin(99999);
+        //spin(99999);
     };
 }
