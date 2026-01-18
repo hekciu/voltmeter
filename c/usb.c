@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <assert.h>
 
 #include "cmsis.h"
 #include "usb.h"
@@ -9,19 +10,12 @@
 #define ENDPOINT_0_ADDRESS 0
 #define BTABLE_ADDRESS 0x0
 
-#define PMA_ADDRESS 0x40006000
-
-typedef struct {
-    uint32_t tx_addrs;
-    uint32_t tx_count;
-    uint32_t rx_addrs;
-    uint32_t rx_count;
-} usb_buff_desc_t;
-
-#define USB_BUFF_DESC_PTR(i) ((usb_buff_desc_t*)(PMA_ADDRESS + ((i) * sizeof(usb_buff_desc_t))))
-
 static void zero_btable();
 static void on_usb_reset();
+static void configure_0_endpoint();
+static void configure_1_endpoint();
+static void set_endpoint_0_rx_status(uint32_t status);
+static void set_endpoint_0_tx_status(uint32_t status);
 
 
 void usb_hp_handler(void) {
@@ -67,7 +61,7 @@ void usb_initialize() {
     USB->CNTR |= USB_CNTR_FRES;
     USB->CNTR = 0UL;
 
-    // configure BDT address
+    // BDT address is 0x0 relative to how USB peripheral see dedicated memory
     USB->BTABLE = BTABLE_ADDRESS;
 
     // switch on interval voltage for port transceiver
@@ -78,19 +72,8 @@ void usb_initialize() {
     // remove any spurious pending interrupt
     USB->ISTR = 0UL;
 
-    // enable all interrupts and configure registers
-    /*
-    USB->CNTR |= USB_CNTR_CTRM;
-    USB->CNTR |= USB_CNTR_PMAOVRM;
-    USB->CNTR |= USB_CNTR_ERRM;
-    USB->CNTR |= USB_CNTR_WKUPM;
-    USB->CNTR |= USB_CNTR_SUSPM;
-    */
+    // enable reset interrupt
     USB->CNTR |= USB_CNTR_RESETM;
-    /*
-    USB->CNTR |= USB_CNTR_SOFM;
-    USB->CNTR |= USB_CNTR_ESOFM;
-    */
 
     // initialize packet buffer description table
 
@@ -99,28 +82,109 @@ void usb_initialize() {
 }
 
 
-static void configure_0_endpoint() {
-    // 0 endpoint must always have CONTROL type
-    USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
-
-    // set 0 endpoint address
-    USB->EP0R &= ~USB_EP0R_EA_Msk;
-    USB->EP0R |= (ENDPOINT_0_ADDRESS << USB_EP0R_EA_Pos);
-
-    // enable 0 endpoint
-}
-
-
 static void on_usb_reset() {
+    zero_btable();
+
+    // configure endpoints
+    configure_0_endpoint();
+    configure_1_endpoint();
+
     // enable USB device
     USB->DADDR |= USB_DADDR_EF;
 
-    configure_0_endpoint();
+    // enable other interrupts (besides  RESETM)
+    USB->CNTR |= USB_CNTR_CTRM;
+    USB->CNTR |= USB_CNTR_PMAOVRM;
+    USB->CNTR |= USB_CNTR_ERRM;
+    USB->CNTR |= USB_CNTR_WKUPM;
+    USB->CNTR |= USB_CNTR_SUSPM;
+    USB->CNTR |= USB_CNTR_SOFM;
+    USB->CNTR |= USB_CNTR_ESOFM;
 }
 
 
-static void zero_btable_endpoint(uint32_t n) {
-    for (uint32_t i = 0; i < sizeof(usb_buff_desc_t); i++) {
-        *(uint32_t*)(USB_BUFF_DESC_PTR(n) + i) = 0UL;
+static void configure_0_endpoint() {
+    // 0 endpoint must always have CONTROL type
+    USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
+    // we always write CTR_TX and CTR_RX so to not clear bit accidentally
+    USB->EP0R |= USB_EP0R_EP_TYPE_0 | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+
+    // set 0 endpoint address
+    USB->EP0R &= ~USB_EP0R_EA_Msk;
+    USB->EP0R |= (ENDPOINT_0_ADDRESS << USB_EP0R_EA_Pos) | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+
+    static_assert(ENDPOINT0_RX_BUFFER_SIZE > 62);
+
+    // set rx endpoint
+    USB_ADDR0_RX_ADDR0_RX = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
+    uint32_t num_blocks = ENDPOINT0_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
+    *(uint32_t*)USB_COUNT0_RX_COUNT0_RX = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
+
+    // clear DTOG_RX bit (by toggling)
+    if ((USB->EP0R & USB_EP0R_DTOG_RX) != 0) {
+        USB->EP0R |= USB_EP0R_DTOG_RX | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
     }
+
+    // set rx endpoint status as valid
+    set_endpoint_0_tx_status(USB_EP_RX_VALID);
+
+
+    // set tx endpoint
+    USB_ADDR0_TX_ADDR0_TX = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
+    *(uint32_t*)USB_COUNT0_TX_COUNT0_TX = 0UL;
+
+    // clear DTOG_TX bit (also by toggling)
+    if ((USB->EP0R & USB_EP0R_DTOG_TX) != 0) {
+        USB->EP0R |= USB_EP0R_DTOG_TX | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+    }
+
+    // set tx endpoint status as valid
+    set_endpoint_0_tx_status(USB_EP_TX_VALID);
+}
+
+
+static void configure_1_endpoint() {
+}
+
+
+static void zero_btable() {
+    *(uint32_t*)USB_ADDR0_RX_ADDR0_RX = 0UL;
+    *(uint32_t*)USB_COUNT0_RX_COUNT0_RX = 0UL;
+    *(uint32_t*)USB_ADDR0_TX_ADDR0_TX = 0UL;
+    *(uint32_t*)USB_COUNT0_TX_COUNT0_TX = 0UL;
+
+    *(uint32_t*)USB_ADDR1_RX_ADDR1_RX = 0UL;
+    *(uint32_t*)USB_COUNT1_RX_COUNT1_RX = 0UL;
+    *(uint32_t*)USB_ADDR1_TX_ADDR1_TX = 0UL;
+    *(uint32_t*)USB_COUNT1_TX_COUNT1_TX = 0UL;
+}
+
+
+static void set_endpoint_0_rx_status(uint32_t status) {
+    uint32_t reg_write_value = 0UL;
+
+    if (((USB->EP0R & USB_EPRX_DTOG1) ^ status) != 0) {
+        reg_write_value |= USB_EPRX_DTOG1;
+    }
+
+    if (((USB->EP0R & USB_EPRX_DTOG2) ^ status) != 0) {
+        reg_write_value |= USB_EPRX_DTOG2;
+    }
+
+    USB->EP0R |= reg_write_value | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+}
+
+
+static void set_endpoint_0_tx_status(uint32_t status) {
+    uint32_t reg_write_value = 0UL;
+
+    if (((USB->EP0R & USB_EPTX_DTOG1) ^ status) != 0) {
+        reg_write_value |= USB_EPTX_DTOG1;
+    }
+
+    if (((USB->EP0R & USB_EPTX_DTOG2) ^ status) != 0) {
+        reg_write_value |= USB_EPTX_DTOG2;
+    }
+
+    USB->EP0R |= reg_write_value;
 }
