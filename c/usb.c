@@ -7,8 +7,29 @@
 #include "systick.h"
 
 
+typedef struct {
+    uint32_t tx_addrs;
+    uint32_t tx_count;
+    uint32_t rx_addrs;
+    uint32_t rx_count; 
+} pma_endpoint_desc_t;
+
+
+#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + n*sizeof(pma_endpoint_desc_t)))
+
+
 #define ENDPOINT_0_ADDRESS 0
 #define BTABLE_ADDRESS 0x0
+
+#define PMA_ENDPT_DESC_BYTES sizeof(pma_endpoint_desc_t)
+#define ENDPT_NUM 8
+
+#define ENDPOINT0_RX_BUFFER_SIZE 1024
+
+#define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
+#define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
+
+#define PMA_ADDR_FROM_APP(n) (n - USB_PMAADDR)
 
 static void zero_btable();
 static void on_usb_reset();
@@ -97,9 +118,9 @@ static void on_usb_reset() {
     USB->CNTR |= USB_CNTR_PMAOVRM;
     USB->CNTR |= USB_CNTR_ERRM;
     USB->CNTR |= USB_CNTR_WKUPM;
-    USB->CNTR |= USB_CNTR_SUSPM;
-    USB->CNTR |= USB_CNTR_SOFM;
-    USB->CNTR |= USB_CNTR_ESOFM;
+    //USB->CNTR |= USB_CNTR_SUSPM;
+    //USB->CNTR |= USB_CNTR_SOFM;
+    //USB->CNTR |= USB_CNTR_ESOFM;
 }
 
 
@@ -116,9 +137,9 @@ static void configure_0_endpoint() {
     static_assert(ENDPOINT0_RX_BUFFER_SIZE > 62);
 
     // set rx endpoint
-    USB_ADDR0_RX_ADDR0_RX = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
+    ENDPOINT_DESC(0)->rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
     uint32_t num_blocks = ENDPOINT0_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
-    *(uint32_t*)USB_COUNT0_RX_COUNT0_RX = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
+    ENDPOINT_DESC(0)->rx_count = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
 
     // clear DTOG_RX bit (by toggling)
     if ((USB->EP0R & USB_EP0R_DTOG_RX) != 0) {
@@ -130,8 +151,8 @@ static void configure_0_endpoint() {
 
 
     // set tx endpoint
-    USB_ADDR0_TX_ADDR0_TX = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
-    *(uint32_t*)USB_COUNT0_TX_COUNT0_TX = 0UL;
+    ENDPOINT_DESC(0)->tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
+    ENDPOINT_DESC(0)->tx_count = 0UL;
 
     // clear DTOG_TX bit (also by toggling)
     if ((USB->EP0R & USB_EP0R_DTOG_TX) != 0) {
@@ -148,15 +169,15 @@ static void configure_1_endpoint() {
 
 
 static void zero_btable() {
-    *(uint32_t*)USB_ADDR0_RX_ADDR0_RX = 0UL;
-    *(uint32_t*)USB_COUNT0_RX_COUNT0_RX = 0UL;
-    *(uint32_t*)USB_ADDR0_TX_ADDR0_TX = 0UL;
-    *(uint32_t*)USB_COUNT0_TX_COUNT0_TX = 0UL;
+    ENDPOINT_DESC(0)->rx_addrs = 0UL;
+    ENDPOINT_DESC(0)->rx_count = 0UL;
+    ENDPOINT_DESC(0)->tx_addrs = 0UL;
+    ENDPOINT_DESC(0)->tx_count = 0UL;
 
-    *(uint32_t*)USB_ADDR1_RX_ADDR1_RX = 0UL;
-    *(uint32_t*)USB_COUNT1_RX_COUNT1_RX = 0UL;
-    *(uint32_t*)USB_ADDR1_TX_ADDR1_TX = 0UL;
-    *(uint32_t*)USB_COUNT1_TX_COUNT1_TX = 0UL;
+    ENDPOINT_DESC(1)->rx_addrs = 0UL;
+    ENDPOINT_DESC(1)->rx_count = 0UL;
+    ENDPOINT_DESC(1)->tx_addrs = 0UL;
+    ENDPOINT_DESC(1)->tx_count = 0UL;
 }
 
 
