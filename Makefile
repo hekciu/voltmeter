@@ -9,6 +9,8 @@ STARTUP_FILE=cmsis/cmsis_f1/Source/Templates/gcc/startup_stm32f103xb.s
 LINKER_SCRIPT=cmsis/cmsis_f1/Source/Templates/gcc/linker/STM32F103XB_FLASH.ld
 SYSTEM_STM32F1XX_FILE=system.c
 
+CFLAGS=-ggdb -mcpu=cortex-m3 -O0
+
 ${BUILD_DIR}:
 	mkdir -p ${BUILD_DIR}
 
@@ -16,22 +18,22 @@ ${BUILD_DIR}/startup.o: ${STARTUP_FILE}
 	arm-none-eabi-gcc -mcpu=cortex-m3 ${STARTUP_FILE} -c -o ${BUILD_DIR}/startup.o
 
 ${BUILD_DIR}/system.o: ${SYSTEM_STM32F1XX_FILE}
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 ${SYSTEM_STM32F1XX_FILE} -c -o ${BUILD_DIR}/system.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} ${SYSTEM_STM32F1XX_FILE} -c -o ${BUILD_DIR}/system.o
 
 ${BUILD_DIR}/main.o: main.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 main.c -c -o ${BUILD_DIR}/main.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} main.c -c -o ${BUILD_DIR}/main.o
 
 ${BUILD_DIR}/usb.o: c/usb.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/usb.c -c -o ${BUILD_DIR}/usb.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} c/usb.c -c -o ${BUILD_DIR}/usb.o
 
 ${BUILD_DIR}/led.o: c/led.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/led.c -c -o ${BUILD_DIR}/led.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} c/led.c -c -o ${BUILD_DIR}/led.o
 
 ${BUILD_DIR}/systick.o: c/systick.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/systick.c -c -o ${BUILD_DIR}/systick.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} c/systick.c -c -o ${BUILD_DIR}/systick.o
 
 ${BUILD_DIR}/system_clock.o: c/system_clock.c
-	arm-none-eabi-gcc ${INC} -mcpu=cortex-m3 c/system_clock.c -c -o ${BUILD_DIR}/system_clock.o
+	arm-none-eabi-gcc ${INC} ${CFLAGS} c/system_clock.c -c -o ${BUILD_DIR}/system_clock.o
 
 OBJECTS=${BUILD_DIR}/system.o ${BUILD_DIR}/startup.o ${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o ${BUILD_DIR}/system_clock.o
 

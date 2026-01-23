@@ -6,7 +6,6 @@
 #include "led.h"
 #include "systick.h"
 
-
 typedef struct {
     uint32_t tx_addrs;
     uint32_t tx_count;
@@ -39,18 +38,59 @@ static void set_endpoint_0_rx_status(uint32_t status);
 static void set_endpoint_0_tx_status(uint32_t status);
 
 
+volatile static uint16_t ISTR_reg_data = 0;
+
 void usb_hp_handler(void) {
-    led_toggle();
+    //ISTR_reg_data = USB->ISTR;
+    //led_toggle();
 }
 
 
 void usb_lp_handler(void) {
-    led_toggle();
+    ISTR_reg_data = USB->ISTR;
+
+    if (ISTR_reg_data & USB_ISTR_RESET) {
+        on_usb_reset();
+        USB->ISTR &= ~USB_ISTR_RESET;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_SOF) {
+        USB->ISTR &= ~USB_ISTR_SOF;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_ESOF) {
+        USB->ISTR &= ~USB_ISTR_ESOF;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_SUSP) {
+        USB->ISTR &= ~USB_ISTR_SUSP;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_WKUP) {
+        USB->ISTR &= ~USB_ISTR_WKUP;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_ERR) {
+        USB->ISTR &= ~USB_ISTR_ERR;
+    }
+
+    if (ISTR_reg_data & USB_ISTR_PMAOVR) {
+        USB->ISTR &= ~USB_ISTR_PMAOVR;
+    }
+
+    if(ISTR_reg_data & USB_ISTR_CTR) {
+        //service_correct_transfer_intr();
+    }
+
+    //led_toggle();
 }
 
 
 void usb_wakeup_handler(void) {
-    led_toggle();
+    //led_toggle();
+    ISTR_reg_data = USB->ISTR;
+
+    on_usb_reset();
 }
 
 
@@ -118,9 +158,11 @@ static void on_usb_reset() {
     USB->CNTR |= USB_CNTR_PMAOVRM;
     USB->CNTR |= USB_CNTR_ERRM;
     USB->CNTR |= USB_CNTR_WKUPM;
-    //USB->CNTR |= USB_CNTR_SUSPM;
-    //USB->CNTR |= USB_CNTR_SOFM;
-    //USB->CNTR |= USB_CNTR_ESOFM;
+    /*
+    USB->CNTR |= USB_CNTR_SUSPM;
+    USB->CNTR |= USB_CNTR_SOFM;
+    USB->CNTR |= USB_CNTR_ESOFM;
+    */
 }
 
 
