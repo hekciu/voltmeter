@@ -30,12 +30,25 @@ typedef struct {
 
 #define PMA_ADDR_FROM_APP(n) (n - USB_PMAADDR)
 
-static void zero_btable();
-static void on_usb_reset();
-static void configure_0_endpoint();
-static void configure_1_endpoint();
+
+/* Static variables */
+static uint8_t USB_Address - 0;
+
+/* Descriptors definitions */
+
+
+
+/* Static function declarations */
+static void zero_btable(void);
+static void on_usb_reset(void);
+static void configure_0_endpoint(void);
+static void configure_1_endpoint(void);
 static void set_endpoint_0_rx_status(uint32_t status);
 static void set_endpoint_0_tx_status(uint32_t status);
+static void process_descriptor_request(void);
+static inline uint32_t get_rx_count(uint8_t endpoint);
+static void service_correct_transfer_intr(void);
+static void control_endpoint_CTR_handler(void);
 
 
 volatile static uint16_t ISTR_reg_data = 0;
@@ -46,8 +59,11 @@ void usb_hp_handler(void) {
 }
 
 
+static volatile int debug_rx_count_ep0 = 0;
 void usb_lp_handler(void) {
     ISTR_reg_data = USB->ISTR;
+
+    debug_rx_count_ep0 = get_rx_count(0);
 
     if (ISTR_reg_data & USB_ISTR_RESET) {
         on_usb_reset();
@@ -79,7 +95,7 @@ void usb_lp_handler(void) {
     }
 
     if(ISTR_reg_data & USB_ISTR_CTR) {
-        //service_correct_transfer_intr();
+        service_correct_transfer_intr();
     }
 
     //led_toggle();
@@ -94,7 +110,7 @@ void usb_wakeup_handler(void) {
 }
 
 
-void usb_initialize() {
+void usb_initialize(void) {
     // enable usb clock
     RCC->APB1ENR |= RCC_APB1ENR_USBEN;
 
@@ -136,14 +152,12 @@ void usb_initialize() {
     // enable reset interrupt
     USB->CNTR |= USB_CNTR_RESETM;
 
-    // initialize packet buffer description table
-
     // this part is the same as when usb reset interrupt is triggered
     on_usb_reset();
 }
 
 
-static void on_usb_reset() {
+static void on_usb_reset(void) {
     zero_btable();
 
     // configure endpoints
@@ -158,15 +172,13 @@ static void on_usb_reset() {
     USB->CNTR |= USB_CNTR_PMAOVRM;
     USB->CNTR |= USB_CNTR_ERRM;
     USB->CNTR |= USB_CNTR_WKUPM;
-    /*
     USB->CNTR |= USB_CNTR_SUSPM;
     USB->CNTR |= USB_CNTR_SOFM;
     USB->CNTR |= USB_CNTR_ESOFM;
-    */
 }
 
 
-static void configure_0_endpoint() {
+static void configure_0_endpoint(void) {
     // 0 endpoint must always have CONTROL type
     USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
     // we always write CTR_TX and CTR_RX so to not clear bit accidentally
@@ -206,11 +218,11 @@ static void configure_0_endpoint() {
 }
 
 
-static void configure_1_endpoint() {
+static void configure_1_endpoint(void) {
 }
 
 
-static void zero_btable() {
+static void zero_btable(void) {
     ENDPOINT_DESC(0)->rx_addrs = 0UL;
     ENDPOINT_DESC(0)->rx_count = 0UL;
     ENDPOINT_DESC(0)->tx_addrs = 0UL;
@@ -250,4 +262,43 @@ static void set_endpoint_0_tx_status(uint32_t status) {
     }
 
     USB->EP0R |= reg_write_value;
+}
+
+
+static inline uint32_t get_rx_count(uint8_t endpoint) {
+    return ENDPOINT_DESC(endpoint)->rx_count & 0x3FF; // first 10 bits
+}
+
+
+static void service_correct_transfer_intr(void) {
+    uint8_t endpoint;
+
+    while (USB->ISTR & USB_ISTR_CTR) {
+        endpoint = USB-ISTR & USB_ISTR_EP_ID;
+
+        if (endpoint == 0) {
+            control_endpoint_CTR_handler();
+        }
+    }
+}
+
+
+static void control_endpoint_CTR_handler(void) {
+    const uint8_t endpoint = 0;
+
+    if ((USB->ISTR & USB_ISTR_DIR) == 0) {
+        // DIR == 0 means IN transaction and CTR_TX definitely is 1
+        clear_tx_ep_ctr(endpoint);
+
+        if (USB_Address != 0) {
+            USB->DADDR = USB_Address | USB_DADDR_EF;
+            USB_Address = 0;
+            set_ep_tx_status(0, USB_EP_TX_STALL);
+        } else {
+            set_ep_tx_status(0, USB_EP_TX_STALL);
+            set_ep_rx_status(0, USB_EP_TX_VALID);
+        }
+    } else {
+        // DIR
+    }
 }
