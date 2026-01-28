@@ -29,10 +29,11 @@ typedef struct {
 #define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
 
 #define PMA_ADDR_FROM_APP(n) (n - USB_PMAADDR)
+#define USB_EP_REG_PTR(n) (&(USB->EP0R) + ((n) * 2U))
 
 
 /* Static variables */
-static uint8_t USB_Address - 0;
+static uint8_t USB_Address = 0;
 
 /* Descriptors definitions */
 
@@ -49,6 +50,10 @@ static void process_descriptor_request(void);
 static inline uint32_t get_rx_count(uint8_t endpoint);
 static void service_correct_transfer_intr(void);
 static void control_endpoint_CTR_handler(void);
+static inline void set_ep_tx_status(uint32_t ep, uint32_t status);
+static inline void set_ep_rx_status(uint32_t ep, uint32_t status);
+static inline void clear_tx_ep_ctr(uint32_t ep);
+static inline void clear_rx_ep_ctr(uint32_t ep);
 
 
 volatile static uint16_t ISTR_reg_data = 0;
@@ -251,17 +256,6 @@ static void set_endpoint_0_rx_status(uint32_t status) {
 
 
 static void set_endpoint_0_tx_status(uint32_t status) {
-    uint32_t reg_write_value = 0UL;
-
-    if (((USB->EP0R & USB_EPTX_DTOG1) ^ status) != 0) {
-        reg_write_value |= USB_EPTX_DTOG1;
-    }
-
-    if (((USB->EP0R & USB_EPTX_DTOG2) ^ status) != 0) {
-        reg_write_value |= USB_EPTX_DTOG2;
-    }
-
-    USB->EP0R |= reg_write_value;
 }
 
 
@@ -274,7 +268,7 @@ static void service_correct_transfer_intr(void) {
     uint8_t endpoint;
 
     while (USB->ISTR & USB_ISTR_CTR) {
-        endpoint = USB-ISTR & USB_ISTR_EP_ID;
+        endpoint = USB->ISTR & USB_ISTR_EP_ID;
 
         if (endpoint == 0) {
             control_endpoint_CTR_handler();
@@ -285,6 +279,7 @@ static void service_correct_transfer_intr(void) {
 
 static void control_endpoint_CTR_handler(void) {
     const uint8_t endpoint = 0;
+    const uint32_t ep_reg_val = USB->EP0R;
 
     if ((USB->ISTR & USB_ISTR_DIR) == 0) {
         // DIR == 0 means IN transaction and CTR_TX definitely is 1
@@ -296,9 +291,59 @@ static void control_endpoint_CTR_handler(void) {
             set_ep_tx_status(0, USB_EP_TX_STALL);
         } else {
             set_ep_tx_status(0, USB_EP_TX_STALL);
-            set_ep_rx_status(0, USB_EP_TX_VALID);
+            set_ep_rx_status(0, USB_EP_RX_VALID);
         }
     } else {
-        // DIR
+        if (ep_reg_val & USB_EP_SETUP) {
+            process_setup_messages();
+        } else if ((ep_reg_val & USB_EP_CTR_RX) != 0) {
+            clear_rx_ep_ctr(endpoint);
+            ENDPOINT_DESC(0)->rx_count = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
+            set_ep_rx_status(0, USB_EP_RX_VALID);
+        }
     }
+}
+
+
+static inline void set_ep_tx_status(uint32_t ep, uint32_t status) {
+    uint32_t reg_write_value = 0UL;
+
+    if (((*USB_EP_REG_PTR(ep) & USB_EPTX_DTOG1) ^ status) != 0) {
+        reg_write_value |= USB_EPTX_DTOG1;
+    }
+
+    if (((*USB_EP_REG_PTR(ep) & USB_EPTX_DTOG2) ^ status) != 0) {
+        reg_write_value |= USB_EPTX_DTOG2;
+    }
+
+    *USB_EP_REG_PTR(ep) = reg_write_value;
+}
+
+
+static inline void set_ep_rx_status(uint32_t ep, uint32_t status) {
+    uint32_t reg_write_value = 0UL;
+
+    if (((*USB_EP_REG_PTR(ep) & USB_EPRX_DTOG1) ^ status) != 0) {
+        reg_write_value |= USB_EPRX_DTOG1;
+    }
+
+    if (((*USB_EP_REG_PTR(ep) & USB_EPRX_DTOG2) ^ status) != 0) {
+        reg_write_value |= USB_EPRX_DTOG2;
+    }
+
+    *USB_EP_REG_PTR(ep) = reg_write_value;
+}
+
+
+static inline void clear_tx_ep_ctr(uint32_t ep) {
+    uint32_t reg_write_value = *USB_EP_REG_PTR(ep) & ~(~USB_EPREG_MASK | USB_EP_CTR_TX);
+
+    *USB_EP_REG_PTR(ep) = reg_write_value;
+}
+
+
+static inline void clear_rx_ep_ctr(uint32_t ep) {
+    uint32_t reg_write_value = *USB_EP_REG_PTR(ep) & ~(~USB_EPREG_MASK | USB_EP_CTR_RX);
+
+    *USB_EP_REG_PTR(ep) = reg_write_value;
 }
