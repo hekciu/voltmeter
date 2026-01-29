@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include <assert.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #include "cmsis.h"
 #include "usb.h"
@@ -14,7 +16,16 @@ typedef struct {
 } pma_endpoint_desc_t;
 
 
-#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + n*sizeof(pma_endpoint_desc_t)))
+typedef struct {
+    uint8_t request_type;
+    uint8_t request;
+    uint16_t value;
+    uint16_t index;
+    uint16_t length;
+} usb_ctrl_req_t;
+
+
+#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + (n)*sizeof(pma_endpoint_desc_t)))
 
 
 #define ENDPOINT_0_ADDRESS 0
@@ -28,9 +39,14 @@ typedef struct {
 #define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
 #define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
 
-#define PMA_ADDR_FROM_APP(n) (n - USB_PMAADDR)
+#define PMA_ADDR_FROM_APP(n) (((n) - USB_PMAADDR) >> 1)
+#define APP_ADDR_FROM_PMA(n) ((1 << n) + USB_PMAADDR)
 #define USB_EP_REG_PTR(n) (&(USB->EP0R) + ((n) * 2U))
 
+/*  */
+#define  GET_TWO_BYTES(addr) (((uint16_t)(*((uint8_t *)(addr)))) + (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
+#define  LOBYTE(x) ((uint8_t)((x) & 0x00FFU))
+#define  HIBYTE(x) ((uint8_t)(((x) & 0xFF00U) >> 8U))
 
 /* Static variables */
 static uint8_t USB_Address = 0;
@@ -54,6 +70,9 @@ static inline void set_ep_tx_status(uint32_t ep, uint32_t status);
 static inline void set_ep_rx_status(uint32_t ep, uint32_t status);
 static inline void clear_tx_ep_ctr(uint32_t ep);
 static inline void clear_rx_ep_ctr(uint32_t ep);
+static void process_setup_messages();
+static void read_data_from_pma(uint16_t rx_addrs, uint8_t* out, uint16_t rx_count);
+static void parse_ctrl_message(uint8_t* data, usb_ctrl_req_t* request);
 
 
 volatile static uint16_t ISTR_reg_data = 0;
@@ -346,4 +365,50 @@ static inline void clear_rx_ep_ctr(uint32_t ep) {
     uint32_t reg_write_value = *USB_EP_REG_PTR(ep) & ~(~USB_EPREG_MASK | USB_EP_CTR_RX);
 
     *USB_EP_REG_PTR(ep) = reg_write_value;
+}
+
+
+static void process_setup_messages() {
+    usb_ctrl_req_t request;
+    const uint8_t endpoint = 0;
+    uint8_t *buff = NULL;
+    uint8_t xfer_data[16] = {0};
+    uint16_t len;
+    uint16_t xfer_count;
+
+    uint16_t vfer_count = get_rx_count(0);
+    read_data_from_pma(ENDPOINT_DESC(0)->rx_addrs, xfer_data, xfer_count);
+
+    clear_rx_ep_ctr(0);
+    parse_ctrl_message(xfer_data, &request);
+}
+
+
+static volatile bool did_read_data = false;
+static void read_data_from_pma(uint16_t rx_addrs, uint8_t* out, uint16_t rx_count) {
+    did_read_data = true;
+    // we read two bytes every time
+    uint16_t count = rx_count >> 1;
+    uint16_t value;
+
+    uint16_t* pma_addr = (uint16_t*)APP_ADDR_FROM_PMA(rx_addrs);
+
+    for (; count != 0; count--) {
+        value = *pma_addr;
+
+        pma_addr += 2;
+        *out = (uint8_t)(value & 0xFF);
+        out++;
+        *out = (uint8_t)((value >> 8) & 0xFF);
+        out++;
+    }
+}
+
+
+static void parse_ctrl_message(uint8_t* data, usb_ctrl_req_t* req) {
+    req->request_type = *(uint8_t *)(data);
+    req->request = *(uint8_t *)(data + 1U);
+    req->value = GET_TWO_BYTES(data + 2U);
+    req->index = GET_TWO_BYTES(data + 4U);
+    req->length = GET_TWO_BYTES(data + 6U);
 }
