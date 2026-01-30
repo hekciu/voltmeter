@@ -8,6 +8,8 @@
 #include "led.h"
 #include "systick.h"
 
+static uint32_t debug_count = 0;
+
 typedef struct {
     uint32_t tx_addrs;
     uint32_t tx_count;
@@ -34,7 +36,7 @@ typedef struct {
 #define PMA_ENDPT_DESC_BYTES sizeof(pma_endpoint_desc_t)
 #define ENDPT_NUM 8
 
-#define ENDPOINT0_RX_BUFFER_SIZE 1024
+#define ENDPOINT0_RX_BUFFER_SIZE 512
 
 #define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
 #define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
@@ -60,8 +62,6 @@ static void zero_btable(void);
 static void on_usb_reset(void);
 static void configure_0_endpoint(void);
 static void configure_1_endpoint(void);
-static void set_endpoint_0_rx_status(uint32_t status);
-static void set_endpoint_0_tx_status(uint32_t status);
 static void process_descriptor_request(void);
 static inline uint32_t get_rx_count(uint8_t endpoint);
 static void service_correct_transfer_intr(void);
@@ -83,11 +83,8 @@ void usb_hp_handler(void) {
 }
 
 
-static volatile int debug_rx_count_ep0 = 0;
 void usb_lp_handler(void) {
     ISTR_reg_data = USB->ISTR;
-
-    debug_rx_count_ep0 = get_rx_count(0);
 
     if (ISTR_reg_data & USB_ISTR_RESET) {
         on_usb_reset();
@@ -119,18 +116,17 @@ void usb_lp_handler(void) {
     }
 
     if(ISTR_reg_data & USB_ISTR_CTR) {
+        debug_count++;
         service_correct_transfer_intr();
     }
-
-    //led_toggle();
 }
 
 
 void usb_wakeup_handler(void) {
     //led_toggle();
-    ISTR_reg_data = USB->ISTR;
+    //ISTR_reg_data = USB->ISTR;
 
-    on_usb_reset();
+    //on_usb_reset();
 }
 
 
@@ -140,19 +136,13 @@ void usb_initialize(void) {
 
     uint32_t usb_priority_group = NVIC_GetPriorityGrouping();
 
-    NVIC_SetPriority(USB_HP_CAN1_TX_IRQn, NVIC_EncodePriority(usb_priority_group, 0, 0));
+    //NVIC_SetPriority(USB_HP_CAN1_TX_IRQn, NVIC_EncodePriority(usb_priority_group, 0, 0));
     NVIC_SetPriority(USB_LP_CAN1_RX0_IRQn, NVIC_EncodePriority(usb_priority_group, 0, 0));
-    NVIC_SetPriority(USBWakeUp_IRQn, NVIC_EncodePriority(usb_priority_group, 0, 0));
+    //NVIC_SetPriority(USBWakeUp_IRQn, NVIC_EncodePriority(usb_priority_group, 0, 0));
 
-    NVIC_EnableIRQ(USB_HP_CAN1_TX_IRQn);
+    //NVIC_EnableIRQ(USB_HP_CAN1_TX_IRQn);
     NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
-    NVIC_EnableIRQ(USBWakeUp_IRQn);
-
-
-    /*
-        usb macrocell clock configuration,
-        we need 48MHz from PLL output
-    */
+    //NVIC_EnableIRQ(USBWakeUp_IRQn);
 
     // de-assert macrocell specific reset signal
     RCC->APB1RSTR &= ~RCC_APB1RSTR_USBRST;
@@ -166,9 +156,9 @@ void usb_initialize(void) {
     USB->BTABLE = BTABLE_ADDRESS;
 
     // switch on interval voltage for port transceiver
-    USB->CNTR &= ~USB_CNTR_PDWN;
+    // USB->CNTR &= ~USB_CNTR_PDWN;
     // wait for t_startup (1 us)
-    systick_wait_ms(1); /* We actually wait 1000x longer but I guess it shouldn't be a problem */
+    // systick_wait_ms(1); /* We actually wait 1000x longer but I guess it shouldn't be a problem */
 
     // remove any spurious pending interrupt
     USB->ISTR = 0UL;
@@ -177,7 +167,7 @@ void usb_initialize(void) {
     USB->CNTR |= USB_CNTR_RESETM;
 
     // this part is the same as when usb reset interrupt is triggered
-    on_usb_reset();
+    //on_usb_reset();
 }
 
 
@@ -186,7 +176,7 @@ static void on_usb_reset(void) {
 
     // configure endpoints
     configure_0_endpoint();
-    configure_1_endpoint();
+    //configure_1_endpoint();
 
     // enable USB device
     USB->DADDR |= USB_DADDR_EF;
@@ -206,7 +196,7 @@ static void configure_0_endpoint(void) {
     // 0 endpoint must always have CONTROL type
     USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
     // we always write CTR_TX and CTR_RX so to not clear bit accidentally
-    USB->EP0R |= USB_EP0R_EP_TYPE_0 | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+    USB->EP0R |= USB_EP_CONTROL | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
 
     // set 0 endpoint address
     USB->EP0R &= ~USB_EP0R_EA_Msk;
@@ -225,7 +215,7 @@ static void configure_0_endpoint(void) {
     }
 
     // set rx endpoint status as valid
-    set_endpoint_0_tx_status(USB_EP_RX_VALID);
+    set_ep_rx_status(0, USB_EP_RX_VALID);
 
 
     // set tx endpoint
@@ -237,8 +227,8 @@ static void configure_0_endpoint(void) {
         USB->EP0R |= USB_EP0R_DTOG_TX | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
     }
 
-    // set tx endpoint status as valid
-    set_endpoint_0_tx_status(USB_EP_TX_VALID);
+    // set tx endpoint status as nak 
+    set_ep_tx_status(0, USB_EP_TX_NAK);
 }
 
 
@@ -256,25 +246,6 @@ static void zero_btable(void) {
     ENDPOINT_DESC(1)->rx_count = 0UL;
     ENDPOINT_DESC(1)->tx_addrs = 0UL;
     ENDPOINT_DESC(1)->tx_count = 0UL;
-}
-
-
-static void set_endpoint_0_rx_status(uint32_t status) {
-    uint32_t reg_write_value = 0UL;
-
-    if (((USB->EP0R & USB_EPRX_DTOG1) ^ status) != 0) {
-        reg_write_value |= USB_EPRX_DTOG1;
-    }
-
-    if (((USB->EP0R & USB_EPRX_DTOG2) ^ status) != 0) {
-        reg_write_value |= USB_EPRX_DTOG2;
-    }
-
-    USB->EP0R |= reg_write_value | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
-}
-
-
-static void set_endpoint_0_tx_status(uint32_t status) {
 }
 
 
@@ -355,16 +326,14 @@ static inline void set_ep_rx_status(uint32_t ep, uint32_t status) {
 
 
 static inline void clear_tx_ep_ctr(uint32_t ep) {
-    uint32_t reg_write_value = *USB_EP_REG_PTR(ep) & ~(~USB_EPREG_MASK | USB_EP_CTR_TX);
-
-    *USB_EP_REG_PTR(ep) = reg_write_value;
+    *USB_EP_REG_PTR(ep) &= ~(~USB_EPREG_MASK | USB_EP_CTR_TX);
+    //*USB_EP_REG_PTR(ep) &= USB_EP_CTR_TX;
 }
 
 
 static inline void clear_rx_ep_ctr(uint32_t ep) {
-    uint32_t reg_write_value = *USB_EP_REG_PTR(ep) & ~(~USB_EPREG_MASK | USB_EP_CTR_RX);
-
-    *USB_EP_REG_PTR(ep) = reg_write_value;
+    *USB_EP_REG_PTR(ep) &= ~(~USB_EPREG_MASK | USB_EP_CTR_RX);
+    //*USB_EP_REG_PTR(ep) &= USB_EP_CTR_RX;
 }
 
 
@@ -384,9 +353,8 @@ static void process_setup_messages() {
 }
 
 
-static volatile bool did_read_data = false;
 static void read_data_from_pma(uint16_t rx_addrs, uint8_t* out, uint16_t rx_count) {
-    did_read_data = true;
+    led_toggle();
     // we read two bytes every time
     uint16_t count = rx_count >> 1;
     uint16_t value;

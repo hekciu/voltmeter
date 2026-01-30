@@ -16,7 +16,7 @@ void system_clock_configure(void) {
     while ((RCC->CR & RCC_CR_HSERDY) == 0);
 
     // set flash latency <- needed if we want 72MHz clock
-    //FLASH->ACR |= FLASH_ACR_LATENCY_2;
+    FLASH->ACR |= FLASH_ACR_LATENCY_2;
 
     // disable PLL
     RCC->CR &= ~RCC_CR_PLLON;
@@ -24,7 +24,7 @@ void system_clock_configure(void) {
 
     // configure PLL
     RCC->CFGR &= ~RCC_CFGR_PLLMULL_Msk;
-    RCC->CFGR |= RCC_CFGR_PLLMULL6;
+    RCC->CFGR |= RCC_CFGR_PLLMULL9;
     RCC->CFGR |= RCC_CFGR_PLLSRC;
 
     // enable PLL
@@ -37,6 +37,9 @@ void system_clock_configure(void) {
     while((RCC->CFGR & RCC_CFGR_SWS_PLL) != RCC_CFGR_SWS_PLL);
 
     // configure AHB and APB prescalers <- probably needed if we want 72MHz
+    RCC->CFGR |= RCC_CFGR_HPRE_DIV1;
+    RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;
+    RCC->CFGR |= RCC_CFGR_PPRE2_DIV1;
 
     // update clock variable
     SystemCoreClockUpdate();

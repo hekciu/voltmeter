@@ -2,6 +2,7 @@
 
 #include "cmsis.h"
 #include "usb.h"
+#include "usart.h"
 #include "led.h"
 #include "systick.h"
 #include "system_clock.h"
@@ -29,7 +30,7 @@ void main(void) {
     usb_initialize();
 
     while(true) {
-        led_toggle();
+        // led_toggle();
 
         systick_wait_ms(500);
 

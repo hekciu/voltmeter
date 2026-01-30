@@ -26,6 +26,9 @@ ${BUILD_DIR}/main.o: main.c
 ${BUILD_DIR}/usb.o: c/usb.c
 	arm-none-eabi-gcc ${INC} ${CFLAGS} c/usb.c -c -o ${BUILD_DIR}/usb.o
 
+${BUILD_DIR}/usart.o: c/usart.c
+	arm-none-eabi-gcc ${INC} ${CFLAGS} c/usart.c -c -o ${BUILD_DIR}/usart.o
+
 ${BUILD_DIR}/led.o: c/led.c
 	arm-none-eabi-gcc ${INC} ${CFLAGS} c/led.c -c -o ${BUILD_DIR}/led.o
 
@@ -35,7 +38,7 @@ ${BUILD_DIR}/systick.o: c/systick.c
 ${BUILD_DIR}/system_clock.o: c/system_clock.c
 	arm-none-eabi-gcc ${INC} ${CFLAGS} c/system_clock.c -c -o ${BUILD_DIR}/system_clock.o
 
-OBJECTS=${BUILD_DIR}/system.o ${BUILD_DIR}/startup.o ${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o ${BUILD_DIR}/system_clock.o
+OBJECTS=${BUILD_DIR}/system.o ${BUILD_DIR}/startup.o ${BUILD_DIR}/main.o ${BUILD_DIR}/usb.o ${BUILD_DIR}/usart.o ${BUILD_DIR}/led.o ${BUILD_DIR}/systick.o ${BUILD_DIR}/system_clock.o
 
 ${BUILD_DIR}/firmware.elf: ${OBJECTS}
 	arm-none-eabi-gcc -T ${LINKER_SCRIPT} -mcpu=cortex-m3 -ffreestanding -nostdlib ${OBJECTS} -o ${BUILD_DIR}/firmware.elf
