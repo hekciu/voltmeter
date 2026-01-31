@@ -36,7 +36,7 @@ typedef struct {
 #define PMA_ENDPT_DESC_BYTES sizeof(pma_endpoint_desc_t)
 #define ENDPT_NUM 8
 
-#define ENDPOINT0_RX_BUFFER_SIZE 512
+#define ENDPOINT0_RX_BUFFER_SIZE 256
 
 #define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
 #define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
@@ -115,7 +115,7 @@ void usb_lp_handler(void) {
         USB->ISTR &= ~USB_ISTR_PMAOVR;
     }
 
-    if(ISTR_reg_data & USB_ISTR_CTR) {
+    if(USB->ISTR & USB_ISTR_CTR) {
         debug_count++;
         service_correct_transfer_intr();
     }
@@ -164,10 +164,9 @@ void usb_initialize(void) {
     USB->ISTR = 0UL;
 
     // enable reset interrupt
-    USB->CNTR |= USB_CNTR_RESETM;
+    USB->CNTR |= USB_CNTR_RESETM | USB_CNTR_CTRM;
 
-    // this part is the same as when usb reset interrupt is triggered
-    //on_usb_reset();
+    // now we wait for RESET interrupt triggered on host connection
 }
 
 
@@ -181,8 +180,7 @@ static void on_usb_reset(void) {
     // enable USB device
     USB->DADDR |= USB_DADDR_EF;
 
-    // enable other interrupts (besides  RESETM)
-    USB->CNTR |= USB_CNTR_CTRM;
+    // enable other interrupts (besides  RESETM and CTRM)
     USB->CNTR |= USB_CNTR_PMAOVRM;
     USB->CNTR |= USB_CNTR_ERRM;
     USB->CNTR |= USB_CNTR_WKUPM;
@@ -296,32 +294,32 @@ static void control_endpoint_CTR_handler(void) {
 
 
 static inline void set_ep_tx_status(uint32_t ep, uint32_t status) {
-    uint32_t reg_write_value = 0UL;
+    uint16_t reg_write_value = *USB_EP_REG_PTR(ep) & USB_EPTX_DTOGMASK;
 
-    if (((*USB_EP_REG_PTR(ep) & USB_EPTX_DTOG1) ^ status) != 0) {
-        reg_write_value |= USB_EPTX_DTOG1;
+    if ((USB_EPTX_DTOG1 & status) != 0U) {
+        reg_write_value ^= USB_EPTX_DTOG1;
     }
 
-    if (((*USB_EP_REG_PTR(ep) & USB_EPTX_DTOG2) ^ status) != 0) {
-        reg_write_value |= USB_EPTX_DTOG2;
+    if ((USB_EPTX_DTOG2 & status) != 0) {
+        reg_write_value ^= USB_EPTX_DTOG2;
     }
 
-    *USB_EP_REG_PTR(ep) = reg_write_value;
+    *USB_EP_REG_PTR(ep) = reg_write_value | USB_EP_CTR_TX | USB_EP_CTR_RX;
 }
 
 
 static inline void set_ep_rx_status(uint32_t ep, uint32_t status) {
-    uint32_t reg_write_value = 0UL;
+    uint16_t reg_write_value = *USB_EP_REG_PTR(ep);
 
-    if (((*USB_EP_REG_PTR(ep) & USB_EPRX_DTOG1) ^ status) != 0) {
-        reg_write_value |= USB_EPRX_DTOG1;
+    if ((USB_EPRX_DTOG1 & status) != 0U) {
+        reg_write_value ^= USB_EPRX_DTOG1;
     }
 
-    if (((*USB_EP_REG_PTR(ep) & USB_EPRX_DTOG2) ^ status) != 0) {
-        reg_write_value |= USB_EPRX_DTOG2;
+    if ((USB_EPRX_DTOG2 & status) != 0) {
+        reg_write_value ^= USB_EPRX_DTOG2;
     }
 
-    *USB_EP_REG_PTR(ep) = reg_write_value;
+    *USB_EP_REG_PTR(ep) = reg_write_value | USB_EP_CTR_TX | USB_EP_CTR_RX;
 }
 
 
