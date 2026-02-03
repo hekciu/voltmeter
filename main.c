@@ -30,9 +30,11 @@ void main(void) {
     usb_initialize();
 
     while(true) {
-        // led_toggle();
+        led_toggle();
 
         systick_wait_ms(500);
+
+        // usb_send_string("dupa\r\n");
 
         //spin(99999);
     };
