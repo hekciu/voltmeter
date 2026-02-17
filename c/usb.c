@@ -8,7 +8,7 @@
 #include "led.h"
 #include "systick.h"
 
-static uint32_t debug_count = 0;
+static volatile uint32_t debug_count = 0;
 
 typedef struct {
     uint32_t tx_addrs;
@@ -27,9 +27,6 @@ typedef struct {
 } usb_ctrl_req_t;
 
 
-#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + (n)*sizeof(pma_endpoint_desc_t)))
-
-
 #define ENDPOINT_0_ADDRESS 0
 #define ENDPOINT_1_ADDRESS 1
 #define BTABLE_ADDRESS 0x0
@@ -46,12 +43,16 @@ typedef struct {
 #define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
 #define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
 
-#define PACKET_RX_BUFFER_ADDR_1 (PACKET_TX_BUFFER_ADDR_0 + ENDPOINT0_TX_BUFFER_SIZE + 100)
+#define PACKET_RX_BUFFER_ADDR_1 (PACKET_TX_BUFFER_ADDR_0 + ENDPOINT0_TX_BUFFER_SIZE)
 #define PACKET_TX_BUFFER_ADDR_1 (PACKET_RX_BUFFER_ADDR_1 + ENDPOINT1_RX_BUFFER_SIZE)
 
 #define PMA_ADDR_FROM_APP(n) (((n) - USB_PMAADDR) >> 1)
 #define APP_ADDR_FROM_PMA(n) ((n << 1) + USB_PMAADDR)
 #define USB_EP_REG_PTR(n) (&(USB->EP0R) + ((n) * 2U))
+
+
+#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + (n)*sizeof(pma_endpoint_desc_t)))
+//#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(0x40006000 + (n)*sizeof(pma_endpoint_desc_t)))
 
 #define  GET_TWO_BYTES(addr) (((uint16_t)(*((uint8_t *)(addr)))) + (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
 #define  LOBYTE(x) ((uint8_t)((x) & 0x00FFU))
@@ -61,12 +62,12 @@ typedef struct {
 #define MAX(a, b) (a > b ? a : b)
 
 /* Static variables */
-static uint8_t USB_Address = 0;
+static volatile uint8_t USB_Address = 0;
 
 
 /* USB-specific definitions */
-#define USBD_PRODUCT_STRING_FS                          "JL HID"
-#define USBD_MANUFACTURER_STRING                        "DupaChuj Manufacturing Ltd."
+#define USBD_PRODUCT_STRING_FS                          "STM32 Learning Interface"
+#define USBD_MANUFACTURER_STRING                        "STMicroelectronics"
 #define USB_SIZ_STRING_SERIAL                           0x1A
 #define UID_BASE                                        0x1FFFF7E8UL    /*!< Unique device ID register base address */
 #define DEVICE_ID1                                      (UID_BASE)
@@ -250,10 +251,10 @@ static void configure_1_endpoint(void);
 static inline uint32_t get_rx_count(uint8_t endpoint);
 static void service_correct_transfer_intr(void);
 static void control_endpoint_CTR_handler(void);
-static inline void set_ep_tx_status(uint32_t ep, uint32_t status);
-static inline void set_ep_rx_status(uint32_t ep, uint32_t status);
-static inline void clear_tx_ep_ctr(uint32_t ep);
-static inline void clear_rx_ep_ctr(uint32_t ep);
+static inline void set_ep_tx_status(uint8_t ep, uint32_t status);
+static inline void set_ep_rx_status(uint8_t ep, uint32_t status);
+static inline void clear_tx_ep_ctr(uint8_t ep);
+static inline void clear_rx_ep_ctr(uint8_t ep);
 static void process_setup_messages(void);
 static void process_descriptor_request(usb_ctrl_req_t* request);
 static void process_standard_request(usb_ctrl_req_t* request);
@@ -277,8 +278,6 @@ void usb_hp_handler(void) {
 
 
 void usb_lp_handler(void) {
-    debug_count++;
-
     ISTR_reg_data = USB->ISTR;
 
     if (ISTR_reg_data & USB_ISTR_RESET) {
@@ -490,6 +489,19 @@ static void service_correct_transfer_intr(void) {
 
         if (endpoint == 0) {
             control_endpoint_CTR_handler();
+        } else {
+            uint16_t ep_reg_value = *USB_EP_REG_PTR(endpoint);
+
+            if((ep_reg_value & USB_EP_CTR_RX) != 0) {
+                clear_rx_ep_ctr(endpoint);
+
+                uint16_t xfer_count = ENDPOINT_DESC(endpoint)->rx_count & 0x3FF;
+
+                // we could read data or something
+                set_ep_rx_status(endpoint, USB_EP_RX_VALID);
+            } else if((ep_reg_value & USB_EP_CTR_TX) != 0) {
+                clear_rx_ep_ctr(endpoint);
+            }
         }
     }
 }
@@ -523,14 +535,14 @@ static void control_endpoint_CTR_handler(void) {
 }
 
 
-static inline void set_ep_tx_status(uint32_t ep, uint32_t status) {
+static inline void set_ep_tx_status(uint8_t ep, uint32_t status) {
     uint16_t reg_write_value = *USB_EP_REG_PTR(ep) & USB_EPTX_DTOGMASK;
 
     if ((USB_EPTX_DTOG1 & status) != 0U) {
         reg_write_value ^= USB_EPTX_DTOG1;
     }
 
-    if ((USB_EPTX_DTOG2 & status) != 0) {
+    if ((USB_EPTX_DTOG2 & status) != 0U) {
         reg_write_value ^= USB_EPTX_DTOG2;
     }
 
@@ -538,14 +550,14 @@ static inline void set_ep_tx_status(uint32_t ep, uint32_t status) {
 }
 
 
-static inline void set_ep_rx_status(uint32_t ep, uint32_t status) {
-    uint16_t reg_write_value = *USB_EP_REG_PTR(ep);
+static inline void set_ep_rx_status(uint8_t ep, uint32_t status) {
+    uint16_t reg_write_value = *USB_EP_REG_PTR(ep) & USB_EPRX_DTOGMASK;
 
     if ((USB_EPRX_DTOG1 & status) != 0U) {
         reg_write_value ^= USB_EPRX_DTOG1;
     }
 
-    if ((USB_EPRX_DTOG2 & status) != 0) {
+    if ((USB_EPRX_DTOG2 & status) != 0U) {
         reg_write_value ^= USB_EPRX_DTOG2;
     }
 
@@ -553,15 +565,22 @@ static inline void set_ep_rx_status(uint32_t ep, uint32_t status) {
 }
 
 
-static inline void clear_tx_ep_ctr(uint32_t ep) {
+static inline void clear_tx_ep_ctr(uint8_t ep) {
     uint16_t reg_write_value = *USB_EP_REG_PTR(ep) & (0x7FFFU & USB_EPREG_MASK);
     *USB_EP_REG_PTR(ep) = reg_write_value | USB_EP_CTR_TX;
 }
 
 
-static inline void clear_rx_ep_ctr(uint32_t ep) {
-    uint16_t reg_write_value = *USB_EP_REG_PTR(ep) & (0x7FFFU & USB_EPREG_MASK);
-    *USB_EP_REG_PTR(ep) = reg_write_value | USB_EP_CTR_RX;
+static inline void clear_rx_ep_ctr(uint8_t ep) {
+    if (ep == 0) {
+        uint16_t reg_write_value = USB->EP0R & (0x7FFFU & USB_EPREG_MASK);
+        USB->EP0R = reg_write_value | USB_EP_CTR_RX;
+    }
+
+    if (ep == 1) {
+        uint16_t reg_write_value = USB->EP1R & (0x7FFFU & USB_EPREG_MASK);
+        USB->EP1R = reg_write_value | USB_EP_CTR_RX;
+    }
 }
 
 
@@ -628,14 +647,12 @@ static void read_data_from_pma(uint16_t rx_addrs, uint8_t* out, uint16_t rx_coun
 }
 
 
-uint16_t* test_addrs = 69;
 static void write_data_to_pma(uint16_t tx_addrs, const uint8_t* src, uint16_t tx_count) {
     // we write two bytes every time
-    uint16_t count = tx_count >> 1;
+    uint16_t count = (tx_count + 1) >> 1;
     uint16_t write_value = 0;
 
-    uint16_t* pma_addr = (uint16_t*)APP_ADDR_FROM_PMA(tx_addrs);
-    test_addrs = pma_addr;
+    volatile uint16_t* pma_addr = (volatile uint16_t*)APP_ADDR_FROM_PMA(tx_addrs);
 
     for (; count != 0; count--) {
         write_value = src[0];
@@ -689,6 +706,8 @@ static void process_descriptor_request(usb_ctrl_req_t* request) {
     switch(request->value >> 8) {
         case USB_DESC_TYPE_DEVICE:
             // 80 06 00 01 00 00 40 00
+            // FIXME: ten case wywołuje sie w nieskończoność
+            debug_count++;
             buff = dev_desc;
             len = sizeof(dev_desc);
             usb_send_data(0, buff, len);
