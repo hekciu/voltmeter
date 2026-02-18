@@ -10,6 +10,8 @@
 
 static volatile uint32_t debug_count = 0;
 
+extern uint32_t _pma_end;
+
 typedef struct {
     uint32_t tx_addrs;
     uint32_t tx_count;
@@ -40,19 +42,20 @@ typedef struct {
 #define ENDPOINT1_RX_BUFFER_SIZE 64
 #define ENDPOINT1_TX_BUFFER_SIZE 64
 
-#define PACKET_RX_BUFFER_ADDR_0 (USB_PMAADDR + PMA_ENDPT_DESC_BYTES * ENDPT_NUM)
-#define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE)
+#define PACKET_RX_BUFFER_ADDR_0 (_pma_end)
+#define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE*sizeof(char))
 
-#define PACKET_RX_BUFFER_ADDR_1 (PACKET_TX_BUFFER_ADDR_0 + ENDPOINT0_TX_BUFFER_SIZE)
-#define PACKET_TX_BUFFER_ADDR_1 (PACKET_RX_BUFFER_ADDR_1 + ENDPOINT1_RX_BUFFER_SIZE)
+#define PACKET_RX_BUFFER_ADDR_1 (PACKET_TX_BUFFER_ADDR_0 + ENDPOINT0_TX_BUFFER_SIZE*sizeof(char))
+#define PACKET_TX_BUFFER_ADDR_1 (PACKET_RX_BUFFER_ADDR_1 + ENDPOINT1_RX_BUFFER_SIZE*sizeof(char))
 
 #define PMA_ADDR_FROM_APP(n) (((n) - USB_PMAADDR) >> 1)
 #define APP_ADDR_FROM_PMA(n) ((n << 1) + USB_PMAADDR)
 #define USB_EP_REG_PTR(n) (&(USB->EP0R) + ((n) * 2U))
 
+#define PMA_BDT_ATTR    __attribute__((section(".pma,\"aw\",%nobits//"), used, aligned(8)))
 
-#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + (n)*sizeof(pma_endpoint_desc_t)))
-//#define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(0x40006000 + (n)*sizeof(pma_endpoint_desc_t)))
+static pma_endpoint_desc_t  PMA_BDT_ATTR endpoint_desc_table[2];
+// #define ENDPOINT_DESC(n) ((pma_endpoint_desc_t*)(USB_PMAADDR + (n)*sizeof(pma_endpoint_desc_t)))
 
 #define  GET_TWO_BYTES(addr) (((uint16_t)(*((uint8_t *)(addr)))) + (((uint16_t)(*(((uint8_t *)(addr)) + 1U))) << 8U))
 #define  LOBYTE(x) ((uint8_t)((x) & 0x00FFU))
@@ -396,9 +399,9 @@ static void configure_0_endpoint(void) {
     static_assert(ENDPOINT0_RX_BUFFER_SIZE > 62);
 
     // set rx endpoint
-    ENDPOINT_DESC(0)->rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
+    endpoint_desc_table[0].rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
     uint32_t num_blocks = ENDPOINT0_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
-    ENDPOINT_DESC(0)->rx_count = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
+    endpoint_desc_table[0].rx_count = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
 
     // clear DTOG_RX bit (by toggling)
     if ((USB->EP0R & USB_EP0R_DTOG_RX) != 0) {
@@ -410,8 +413,8 @@ static void configure_0_endpoint(void) {
 
 
     // set tx endpoint
-    ENDPOINT_DESC(0)->tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
-    ENDPOINT_DESC(0)->tx_count = 0UL;
+    endpoint_desc_table[0].tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
+    endpoint_desc_table[0].tx_count = 0UL;
 
     // clear DTOG_TX bit (also by toggling)
     if ((USB->EP0R & USB_EP0R_DTOG_TX) != 0) {
@@ -436,9 +439,9 @@ static void configure_1_endpoint(void) {
     static_assert(ENDPOINT1_RX_BUFFER_SIZE > 62);
 
     // set rx endpoint
-    ENDPOINT_DESC(1)->rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_1);
+    endpoint_desc_table[1].rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_1);
     uint32_t num_blocks = ENDPOINT1_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
-    ENDPOINT_DESC(1)->rx_count = USB_COUNT1_RX_BLSIZE | (num_blocks << 10);
+    endpoint_desc_table[1].rx_count = USB_COUNT1_RX_BLSIZE | (num_blocks << 10);
 
     // clear DTOG_RX bit (by toggling)
     if ((USB->EP1R & USB_EP1R_DTOG_RX) != 0) {
@@ -450,8 +453,8 @@ static void configure_1_endpoint(void) {
 
 
     // set tx endpoint
-    ENDPOINT_DESC(1)->tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_1);
-    ENDPOINT_DESC(1)->tx_count = 0UL;
+    endpoint_desc_table[1].tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_1);
+    endpoint_desc_table[1].tx_count = 0UL;
 
     // clear DTOG_TX bit (also by toggling)
     if ((USB->EP1R & USB_EP1R_DTOG_TX) != 0) {
@@ -464,20 +467,20 @@ static void configure_1_endpoint(void) {
 
 
 static void zero_btable(void) {
-    ENDPOINT_DESC(0)->rx_addrs = 0UL;
-    ENDPOINT_DESC(0)->rx_count = 0UL;
-    ENDPOINT_DESC(0)->tx_addrs = 0UL;
-    ENDPOINT_DESC(0)->tx_count = 0UL;
+    endpoint_desc_table[0].rx_addrs = 0UL;
+    endpoint_desc_table[0].rx_count = 0UL;
+    endpoint_desc_table[0].tx_addrs = 0UL;
+    endpoint_desc_table[0].tx_count = 0UL;
 
-    ENDPOINT_DESC(1)->rx_addrs = 0UL;
-    ENDPOINT_DESC(1)->rx_count = 0UL;
-    ENDPOINT_DESC(1)->tx_addrs = 0UL;
-    ENDPOINT_DESC(1)->tx_count = 0UL;
+    endpoint_desc_table[1].rx_addrs = 0UL;
+    endpoint_desc_table[1].rx_count = 0UL;
+    endpoint_desc_table[1].tx_addrs = 0UL;
+    endpoint_desc_table[1].tx_count = 0UL;
 }
 
 
 static inline uint32_t get_rx_count(uint8_t endpoint) {
-    return ENDPOINT_DESC(endpoint)->rx_count & 0x3FF; // first 10 bits
+    return endpoint_desc_table[endpoint].rx_count & 0x3FF; // first 10 bits
 }
 
 
@@ -495,7 +498,7 @@ static void service_correct_transfer_intr(void) {
             if((ep_reg_value & USB_EP_CTR_RX) != 0) {
                 clear_rx_ep_ctr(endpoint);
 
-                uint16_t xfer_count = ENDPOINT_DESC(endpoint)->rx_count & 0x3FF;
+                uint16_t xfer_count = endpoint_desc_table[endpoint].rx_count & 0x3FF;
 
                 // we could read data or something
                 set_ep_rx_status(endpoint, USB_EP_RX_VALID);
@@ -528,7 +531,7 @@ static void control_endpoint_CTR_handler(void) {
             process_setup_messages();
         } else if ((ep_reg_val & USB_EP_CTR_RX) != 0) {
             clear_rx_ep_ctr(endpoint);
-            ENDPOINT_DESC(0)->rx_count = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
+            endpoint_desc_table[0].rx_count = ((1 << 10) | USB_COUNT0_RX_BLSIZE);
             set_ep_rx_status(0, USB_EP_RX_VALID);
         }
     }
@@ -592,7 +595,7 @@ static void process_setup_messages() {
     uint16_t len;
 
     uint16_t xfer_count = get_rx_count(0);
-    read_data_from_pma(ENDPOINT_DESC(0)->rx_addrs, xfer_data, xfer_count);
+    read_data_from_pma(endpoint_desc_table[0].rx_addrs, xfer_data, xfer_count);
 
     clear_rx_ep_ctr(0);
     parse_ctrl_message(xfer_data, &request);
@@ -772,8 +775,8 @@ static void process_string_request(usb_ctrl_req_t* request) {
 
 
 static void usb_send_data(uint8_t ep, const uint8_t* buffer, uint16_t len) {
-    write_data_to_pma(ENDPOINT_DESC(ep)->tx_addrs, buffer, len);
-    ENDPOINT_DESC(ep)->tx_count = len;
+    write_data_to_pma(endpoint_desc_table[ep].tx_addrs, buffer, len);
+    endpoint_desc_table[ep].tx_count = len;
     set_ep_tx_status(ep, USB_EP_TX_VALID);
 }
 

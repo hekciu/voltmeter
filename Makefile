@@ -6,7 +6,8 @@ INC=-I${CMSIS_CORE_INCLUDE} -I${CMSIS_WB_INCLUDE} -I${APP_INCLUDE}
 BUILD_DIR=out
 
 STARTUP_FILE=cmsis/cmsis_f1/Source/Templates/gcc/startup_stm32f103xb.s
-LINKER_SCRIPT=cmsis/cmsis_f1/Source/Templates/gcc/linker/STM32F103XB_FLASH.ld
+# LINKER_SCRIPT=cmsis/cmsis_f1/Source/Templates/gcc/linker/STM32F103XB_FLASH.ldmsis/cmsis_f1/Source/Templates/gcc/linker/STM32F103XB_FLASH.ld
+LINKER_SCRIPT=link.ld
 SYSTEM_STM32F1XX_FILE=system.c
 
 CFLAGS=-ggdb -mcpu=cortex-m3 -O0
