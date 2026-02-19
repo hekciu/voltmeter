@@ -12,6 +12,8 @@ static volatile uint32_t debug_count = 0;
 
 extern uint32_t _pma_end;
 
+static uint32_t *pma_ptr = NULL;
+
 typedef struct {
     uint32_t tx_addrs;
     uint32_t tx_count;
@@ -42,14 +44,8 @@ typedef struct {
 #define ENDPOINT1_RX_BUFFER_SIZE 64
 #define ENDPOINT1_TX_BUFFER_SIZE 64
 
-#define PACKET_RX_BUFFER_ADDR_0 (_pma_end)
-#define PACKET_TX_BUFFER_ADDR_0 (PACKET_RX_BUFFER_ADDR_0 + ENDPOINT0_RX_BUFFER_SIZE*sizeof(char))
-
-#define PACKET_RX_BUFFER_ADDR_1 (PACKET_TX_BUFFER_ADDR_0 + ENDPOINT0_TX_BUFFER_SIZE*sizeof(char))
-#define PACKET_TX_BUFFER_ADDR_1 (PACKET_RX_BUFFER_ADDR_1 + ENDPOINT1_RX_BUFFER_SIZE*sizeof(char))
-
-#define PMA_ADDR_FROM_APP(n) (((n) - USB_PMAADDR) >> 1)
-#define APP_ADDR_FROM_PMA(n) ((n << 1) + USB_PMAADDR)
+#define PMA_ADDR_FROM_APP(n) (((uint32_t*)(n) - (uint32_t*)USB_PMAADDR) >> 1UL)
+#define APP_ADDR_FROM_PMA(n) ((n << 1) + (uint32_t*)USB_PMAADDR)
 #define USB_EP_REG_PTR(n) (&(USB->EP0R) + ((n) * 2U))
 
 #define PMA_BDT_ATTR    __attribute__((section(".pma,\"aw\",%nobits//"), used, aligned(8)))
@@ -66,6 +62,13 @@ static pma_endpoint_desc_t  PMA_BDT_ATTR endpoint_desc_table[2];
 
 /* Static variables */
 static volatile uint8_t USB_Address = 0;
+
+
+static uint32_t* allocate_pma_buffer(uint16_t len) {
+    uint32_t* ret = pma_ptr;
+    pma_ptr += (len + 1) >> 1;
+    return ret;
+}
 
 
 /* USB-specific definitions */
@@ -367,6 +370,8 @@ void usb_initialize(void) {
 
 
 static void on_usb_reset(void) {
+    pma_ptr = &_pma_end;
+
     zero_btable();
 
     // configure endpoints
@@ -399,7 +404,7 @@ static void configure_0_endpoint(void) {
     static_assert(ENDPOINT0_RX_BUFFER_SIZE > 62);
 
     // set rx endpoint
-    endpoint_desc_table[0].rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_0);
+    endpoint_desc_table[0].rx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(ENDPOINT0_RX_BUFFER_SIZE));
     uint32_t num_blocks = ENDPOINT0_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
     endpoint_desc_table[0].rx_count = USB_COUNT0_RX_BLSIZE | (num_blocks << 10);
 
@@ -413,7 +418,7 @@ static void configure_0_endpoint(void) {
 
 
     // set tx endpoint
-    endpoint_desc_table[0].tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_0);
+    endpoint_desc_table[0].tx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(ENDPOINT0_TX_BUFFER_SIZE));
     endpoint_desc_table[0].tx_count = 0UL;
 
     // clear DTOG_TX bit (also by toggling)
@@ -439,7 +444,7 @@ static void configure_1_endpoint(void) {
     static_assert(ENDPOINT1_RX_BUFFER_SIZE > 62);
 
     // set rx endpoint
-    endpoint_desc_table[1].rx_addrs = PMA_ADDR_FROM_APP(PACKET_RX_BUFFER_ADDR_1);
+    endpoint_desc_table[1].rx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(ENDPOINT1_RX_BUFFER_SIZE));
     uint32_t num_blocks = ENDPOINT1_RX_BUFFER_SIZE / 64; // because we check BLSIZE bit
     endpoint_desc_table[1].rx_count = USB_COUNT1_RX_BLSIZE | (num_blocks << 10);
 
@@ -453,7 +458,7 @@ static void configure_1_endpoint(void) {
 
 
     // set tx endpoint
-    endpoint_desc_table[1].tx_addrs = PMA_ADDR_FROM_APP(PACKET_TX_BUFFER_ADDR_1);
+    endpoint_desc_table[1].tx_addrs = PMA_ADDR_FROM_APP(allocate_pma_buffer(ENDPOINT1_TX_BUFFER_SIZE));
     endpoint_desc_table[1].tx_count = 0UL;
 
     // clear DTOG_TX bit (also by toggling)
