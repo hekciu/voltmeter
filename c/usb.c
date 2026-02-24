@@ -376,30 +376,30 @@ static void on_usb_reset(void) {
 
     // configure endpoints
     configure_0_endpoint();
-    //configure_1_endpoint();
+    configure_1_endpoint();
 
     // enable USB device
-    USB->DADDR |= USB_DADDR_EF;
+    USB->DADDR |= (uint16_t)USB_DADDR_EF;
 
     // enable other interrupts (besides  RESETM and CTRM)
-    USB->CNTR |= USB_CNTR_PMAOVRM;
-    USB->CNTR |= USB_CNTR_ERRM;
-    USB->CNTR |= USB_CNTR_WKUPM;
-    USB->CNTR |= USB_CNTR_SUSPM;
-    USB->CNTR |= USB_CNTR_SOFM;
-    USB->CNTR |= USB_CNTR_ESOFM;
+    USB->CNTR |= (uint16_t)USB_CNTR_PMAOVRM;
+    USB->CNTR |= (uint16_t)USB_CNTR_ERRM;
+    USB->CNTR |= (uint16_t)USB_CNTR_WKUPM;
+    USB->CNTR |= (uint16_t)USB_CNTR_SUSPM;
+    USB->CNTR |= (uint16_t)USB_CNTR_SOFM;
+    USB->CNTR |= (uint16_t)USB_CNTR_ESOFM;
 }
 
 
 static void configure_0_endpoint(void) {
     // 0 endpoint must always have CONTROL type
-    USB->EP0R &= ~USB_EP0R_EP_TYPE_Msk;
+    USB->EP0R &= (~USB_EP_T_FIELD) & USB_EP0R_EP_TYPE_Msk;
     // we always write CTR_TX and CTR_RX so to not clear bit accidentally
     USB->EP0R |= USB_EP_CONTROL | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
 
     // set 0 endpoint address
     USB->EP0R &= ~USB_EP0R_EA_Msk;
-    USB->EP0R |= (ENDPOINT_0_ADDRESS << USB_EP0R_EA_Pos) | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
+    USB->EP0R |= ENDPOINT_0_ADDRESS | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
 
     static_assert(ENDPOINT0_RX_BUFFER_SIZE > 62);
 
@@ -433,13 +433,13 @@ static void configure_0_endpoint(void) {
 
 static void configure_1_endpoint(void) {
     // 1 endpoint have interrupt type
-    USB->EP1R &= ~USB_EP0R_EP_TYPE_Msk;
+    USB->EP0R &= (~USB_EP_T_FIELD) & USB_EP1R_EP_TYPE_Msk;
     // we always write CTR_TX and CTR_RX so to not clear bit accidentally
     USB->EP1R |= USB_EP_INTERRUPT | USB_EP0R_CTR_TX | USB_EP0R_CTR_RX;
 
     // set 1 endpoint address
     USB->EP1R &= ~USB_EP1R_EA_Msk;
-    USB->EP1R |= (ENDPOINT_1_ADDRESS << USB_EP1R_EA_Pos) | USB_EP1R_CTR_TX | USB_EP1R_CTR_RX;
+    USB->EP1R |= ENDPOINT_1_ADDRESS | USB_EP1R_CTR_TX | USB_EP1R_CTR_RX;
 
     static_assert(ENDPOINT1_RX_BUFFER_SIZE > 62);
 
